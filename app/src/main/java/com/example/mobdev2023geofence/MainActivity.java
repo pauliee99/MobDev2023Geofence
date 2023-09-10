@@ -15,6 +15,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        // @TODO: maybe add some progress bars around here ( MobDev (2022 12 12) )
         Button btnMapActivity = (Button)findViewById(R.id.buttonMapActivity);
         btnMapActivity.setOnClickListener(new View.OnClickListener() {
             @Override

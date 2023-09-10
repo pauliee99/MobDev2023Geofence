@@ -1,41 +1,27 @@
 package com.example.mobdev2023geofence;
 
-import static java.sql.Types.NULL;
-
 import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
-import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 import androidx.room.Room;
 
 import android.Manifest;
-import android.annotation.SuppressLint;
-import android.content.ContentProvider;
 import android.content.ContentResolver;
-import android.content.ContentValues;
-import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.database.Cursor;
-import android.database.sqlite.SQLiteDatabase;
 import android.graphics.Color;
-import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.LayoutInflater;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.Toast;
 
-import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.Circle;
 import com.google.android.gms.maps.model.CircleOptions;
 import com.google.android.gms.maps.model.LatLng;
-import com.google.android.gms.maps.model.MarkerOptions;
 import com.example.mobdev2023geofence.databinding.ActivityMapsBinding;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.maps.android.SphericalUtil;
@@ -49,7 +35,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
     private GoogleMap mMap;
     private ActivityMapsBinding binding;
-    private DatabaseHelper helper;
     private static String AUTHORITY = "com.example.mobdev2023geofence";
     private static String PATH = "circle";
 
@@ -166,7 +151,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                         Log.d("MyTag", "circle is null");
                     }
                     LatLng centerToRemove = circleToRemove.getCenter();
-                    //@TODO: fix delete function
+
                     new Thread(() -> {
                         double latitude = centerToRemove.latitude;
                         double longitude = centerToRemove.longitude;
@@ -193,10 +178,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         });
 
         Button startButton = findViewById(R.id.startButton);
-        startButton.setOnClickListener(new View.OnClickListener() {
+        startButton.setOnClickListener(new View.OnClickListener() { // start service button
             @Override
             public void onClick(View view) {
-                Toast.makeText(MapsActivity.this, "Button Clicked", Toast.LENGTH_SHORT).show();
                 for (int i = 0; i < circles.size(); i++){
                     com.example.mobdev2023geofence.Circle circle = new com.example.mobdev2023geofence.Circle();
                     circle.latitude = circles.get(i).getCenter().latitude;
@@ -204,11 +188,13 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     List<com.example.mobdev2023geofence.Circle> qwe = new ArrayList<>();
                     new Thread(() ->circleDAO.insertCircle(circle)).start();
                 }
+                startGeofenceService();
+                Toast.makeText(MapsActivity.this, "Service Started", Toast.LENGTH_SHORT).show();
             }
         });
 
         FloatingActionButton cancelButton = findViewById(R.id.cancelButton);
-        cancelButton.setOnClickListener(new View.OnClickListener() {
+        cancelButton.setOnClickListener(new View.OnClickListener() { // go back button
             @Override
             public void onClick(View view) {
                 //startActivity(new Intent(MapsActivity.this, MainActivity.class));
@@ -223,5 +209,11 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 //        mMap.addMarker(new MarkerOptions().position(sydney).title("Marker in Sydney"));
 //        mMap.moveCamera(CameraUpdateFactory.newLatLng(sydney));
     }
+
+    private void startGeofenceService() {
+        Intent serviceIntent = new Intent(this, GeofenceService.class);
+        startService(serviceIntent);
+    }
+
 
 }
