@@ -6,16 +6,22 @@ import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
+import androidx.room.Room;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.content.ContentProvider;
+import android.content.ContentResolver;
 import android.content.ContentValues;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -35,12 +41,17 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.maps.android.SphericalUtil;
 
 import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.logging.Logger;
 
 public class MapsActivity extends FragmentActivity implements OnMapReadyCallback {
 
     private GoogleMap mMap;
     private ActivityMapsBinding binding;
     private DatabaseHelper helper;
+    private static String AUTHORITY = "com.example.mobdev2023geofence";
+    private static String PATH = "circle";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -89,27 +100,50 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         showPosition();
 //        FusedLocationProviderClient fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
 //        mMap.moveCamera(CameraUpdateFactory.newLatLng(new LatLng()));
-        ArrayList<Circle> circles = new ArrayList<>();
+        List<Circle> circles = new ArrayList<>();
+        List coordinates = new ArrayList();
 
-        helper = new DatabaseHelper(MapsActivity.this);
-        SQLiteDatabase database = helper.getReadableDatabase();
-        if (database != null) {
-            Cursor cursor = database.query(DatabaseHelper.TABLE_NAME, null, null, null, null, null, null);
-            if(cursor.moveToFirst()){
-                do{
-                    CircleOptions circleOptions = new CircleOptions();
-                    LatLng latlng = new LatLng(cursor.getDouble(1), cursor.getDouble(2));
-                    circleOptions.center(latlng);
-                    circleOptions.radius(100);
-                    circleOptions.strokeColor(Color.RED);
-                    circleOptions.fillColor(0x11FFA420);
-                    circleOptions.visible(true);
-                    Circle newCircle = mMap.addCircle(circleOptions);
-                    circles.add(newCircle);
-                }while(cursor.moveToNext());
-            }
+        AppDatabase db = Room.databaseBuilder(getApplicationContext(), AppDatabase.class, "circles").build();
+        CircleDAO circleDAO = db.circleDAO();
+        ContentResolver resolver = this.getContentResolver();
+        final CountDownLatch latch = new CountDownLatch(1);
+
+        new Thread(() -> {
+            List<com.example.mobdev2023geofence.Circle> circlesdb = circleDAO.getAll();
+            circlesdb.forEach((tmp)->{
+                Log.d("MyTag", "Circle ID: " + tmp.id + ", Latitude: " + tmp.latitude + ", Longitude: " + tmp.longitude);
+                LatLng latlng = new LatLng(tmp.latitude, tmp.longitude);
+                coordinates.add(latlng);
+            });
+            latch.countDown();
+        }).start();
+
+        try {
+            // Wait for the thread to finish using the CountDownLatch
+            latch.await();
+
+            // You can now safely access 'circlesdb' here, and it should contain the fetched data
+            coordinates.forEach((tmp)->{
+                Log.d("MyTag", "Circle ID: " + (LatLng) tmp);
+            });
+        } catch (InterruptedException e) {
+            e.printStackTrace();
         }
 
+
+
+        coordinates.forEach((tmp) -> {
+            CircleOptions circleOptions = new CircleOptions();
+            circleOptions.center((LatLng) tmp);
+            circleOptions.radius(100);
+            circleOptions.strokeColor(Color.RED);
+            circleOptions.fillColor(0x11FFA420);
+            circleOptions.visible(true);
+            Circle newCircle = mMap.addCircle(circleOptions);
+            circles.add(newCircle);
+        });
+
+        // on map click
         mMap.setOnMapLongClickListener(latLng -> {
             CircleOptions circleOptions = new CircleOptions();
             circleOptions.center(latLng);
@@ -128,33 +162,30 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 if (distance < existingCircle.getRadius()) {
                     circleToRemove = existingCircle; //remove circle form the list
                     // and also remove it form the database if it exists
-                    String selection = DatabaseHelper.FIELD_1 + " = ? AND " + DatabaseHelper.FIELD_2 + " = ?";
-                    String[] selectionArgs = {String.valueOf(existingCircle.getCenter().latitude), String.valueOf(existingCircle.getCenter().longitude)};
-
-                    Cursor cursor = database.query(
-                            DatabaseHelper.TABLE_NAME,
-                            null, // You can specify the columns you want to retrieve here, or use null for all columns
-                            selection,
-                            selectionArgs,
-                            null,
-                            null,
-                            null
-                    );
-                    boolean existsInDatabase = cursor.moveToFirst();
-
-                    if (existsInDatabase) {
-                        database.delete(DatabaseHelper.TABLE_NAME, selection, selectionArgs);
-                    } else {
-                        // The combination does not exist in the database, handle it accordingly
+                    if (circleToRemove == null){
+                        Log.d("MyTag", "circle is null");
                     }
-                    cursor.close();
+                    LatLng centerToRemove = circleToRemove.getCenter();
+                    //@TODO: fix delete function
+                    new Thread(() -> {
+                        double latitude = centerToRemove.latitude;
+                        double longitude = centerToRemove.longitude;
+                        int deletedRows = circleDAO.deleteCircleByLatLon(centerToRemove.latitude, centerToRemove.longitude);
+                        if (deletedRows > 0) {
+                            Logger.getAnonymousLogger().severe("record deleted successfully");
+                        } else {
+                            Logger.getAnonymousLogger().severe("record not found");
+                        }
+                    }).start();
+                    circleToRemove.remove();
+                    circles.remove(circleToRemove);
                     break;
                 }
             }
 
             if (circleToRemove != null) {
-                circleToRemove.remove();
-                circles.remove(circleToRemove);
+//                circleToRemove.remove();
+//                circles.remove(circleToRemove);
             } else {
                 Circle newCircle = mMap.addCircle(circleOptions);
                 circles.add(newCircle);
@@ -167,20 +198,11 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             public void onClick(View view) {
                 Toast.makeText(MapsActivity.this, "Button Clicked", Toast.LENGTH_SHORT).show();
                 for (int i = 0; i < circles.size(); i++){
-                    double lat = circles.get(i).getCenter().latitude;
-                    double lon = circles.get(i).getCenter().longitude;
-                    double rad = circles.get(i).getRadius();
-                    int fill = circles.get(i).getFillColor();
-                    int stroke = circles.get(i).getStrokeColor();
-                    ContentValues values = new ContentValues();
-                    values.put(DatabaseHelper.FIELD_1, lat);
-                    values.put(DatabaseHelper.FIELD_2, lon);
-                    values.put(DatabaseHelper.FIELD_3, rad);
-                    values.put(DatabaseHelper.FIELD_4, fill);
-                    values.put(DatabaseHelper.FIELD_5, stroke);
-
-                    SQLiteDatabase database = helper.getWritableDatabase();
-                    database.insert(DatabaseHelper.TABLE_NAME, null, values);
+                    com.example.mobdev2023geofence.Circle circle = new com.example.mobdev2023geofence.Circle();
+                    circle.latitude = circles.get(i).getCenter().latitude;
+                    circle.longitude = circles.get(i).getCenter().longitude;
+                    List<com.example.mobdev2023geofence.Circle> qwe = new ArrayList<>();
+                    new Thread(() ->circleDAO.insertCircle(circle)).start();
                 }
             }
         });
@@ -192,7 +214,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 //startActivity(new Intent(MapsActivity.this, MainActivity.class));
                 circles.clear();
                 Toast.makeText(MapsActivity.this, "changes discarded", Toast.LENGTH_SHORT).show();
-                database.close();
                 finish();
             }
         });
@@ -202,4 +223,5 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 //        mMap.addMarker(new MarkerOptions().position(sydney).title("Marker in Sydney"));
 //        mMap.moveCamera(CameraUpdateFactory.newLatLng(sydney));
     }
+
 }
