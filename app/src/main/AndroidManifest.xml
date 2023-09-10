@@ -15,15 +15,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.MobDev2023Geofence"
         tools:targetApi="31">
-        <receiver
-            android:name=".GpsBroadcastReceiver"
-            android:enabled="true"
-            android:exported="true"></receiver>
 
-        <service
-            android:name=".GeofenceService"
-            android:enabled="true"
-            android:exported="true" />
         <!--
              TODO: Before you run your application, you need a Google Maps API key.
 
@@ -34,14 +26,25 @@
              Once you have your API key (it starts with "AIza"), define a new property in your
              project's local.properties file (e.g. MAPS_API_KEY=Aiza...), and replace the
              "YOUR_API_KEY" string in this file with "${MAPS_API_KEY}".
-
-             AIzaSyDo7I4h4OzrOb3MXYfWArS1fYo0rU0BiXg
-             AIzaSyAv1wf5eMyErPaU3l8EnMUmOsoYJ2joC70
-             AIzaSyCnGHbf6vK3MXYfWArS1fYo0rU0BiXg
         -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyDWF5Al83s2a9P1JctqM3um9usNXEpVa2U" />
+
+        <activity
+            android:name=".ResultsMapActivity"
+            android:exported="false"
+            android:label="@string/title_activity_results_map" />
+
+        <receiver
+            android:name=".GpsBroadcastReceiver"
+            android:enabled="true"
+            android:exported="true" />
+
+        <service
+            android:name=".GeofenceService"
+            android:enabled="true"
+            android:exported="true" />
 
         <activity
             android:name=".MapsActivity"

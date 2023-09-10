@@ -20,7 +20,7 @@
         app:layout_constraintVertical_bias="0.31" />
 
     <Button
-        android:id="@+id/button2"
+        android:id="@+id/buttonResultsMapActivity"
         android:layout_width="179dp"
         android:layout_height="83dp"
         android:text="@string/ResultsMapActivity_button_text"
