@@ -2,11 +2,10 @@ package com.example.mobdev2023geofence;
 
 import androidx.room.ColumnInfo;
 import androidx.room.Entity;
-import androidx.room.Index;
 import androidx.room.PrimaryKey;
 
-@Entity(tableName = "circles", indices = {@Index(value = {"latitude", "longitude"}, unique = true)})
-public class Circle {
+@Entity(tableName = "circle_entry_points")
+public class CircleEntryPoint {
     @PrimaryKey(autoGenerate = true)
     public int id;
 
@@ -17,7 +16,5 @@ public class Circle {
     public double longitude;
 
     @ColumnInfo(name="session_id")
-    public String session_id;
-
+    public String sessionId;
 }
- 

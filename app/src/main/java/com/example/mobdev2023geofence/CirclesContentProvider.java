@@ -53,7 +53,7 @@ public class CirclesContentProvider extends ContentProvider {
                 break;
             case 2:
                 int id = Integer.parseInt(uri.getLastPathSegment());
-                Circle circle = circleDAO.getCircleById(id);
+                Circle circle = circleDAO.getCirclesById(id);
                 cursor.newRow()
                         .add("id", circle.id)
                         .add("latitude", circle.latitude)

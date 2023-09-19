@@ -11,6 +11,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.util.Log;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -18,6 +19,7 @@ import androidx.room.Room;
 
 import com.google.android.gms.maps.model.LatLng;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class GeofenceService extends Service {
@@ -27,12 +29,16 @@ public class GeofenceService extends Service {
     private ContentResolver resolver;
     private AppDatabase db;
     private CircleDAO circleDAO;
+    private SessionDAO sessionDAO;
     private static final long MIN_DISTANCE_CHANGE_FOR_UPDATE = 50; // 50 meters
     private static final long MIN_TIME_BETWEEN_UPDATE = 5000; // 5 seconds
+    private CurrentSession currentSession;
+    public boolean isPaused = false;
 
     @Override
     public void onCreate() {
         super.onCreate();
+        Toast.makeText(this, "Service Started", Toast.LENGTH_SHORT).show();
         resolver = getContentResolver();
         db = Room.databaseBuilder(getApplicationContext(), AppDatabase.class, "circles")
                 .fallbackToDestructiveMigration()
@@ -43,8 +49,10 @@ public class GeofenceService extends Service {
             @Override
             public void onLocationChanged(@NonNull Location location) {
                 // Check if the location has changed by more than 50 meters
-                if (isLocationChanged(location)) {
-                    checkGeofence(location);
+                if (!isPaused) {
+                    if (isLocationChanged(location)) {
+                        checkGeofence(location);
+                    }
                 }
             }
 
@@ -85,6 +93,7 @@ public class GeofenceService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        Toast.makeText(this, "Service Stopped", Toast.LENGTH_SHORT).show();
         // Stop location updates when the service is destroyed
         locationManager.removeUpdates(locationListener);
     }
@@ -106,22 +115,30 @@ public class GeofenceService extends Service {
     private void checkGeofence(Location currentLocation) {
         // Retrieve the list of circles from the database using the Content Provider
         Uri uri = Uri.parse("content://com.example.mobdev2023geofence/circle");
-        List<Circle> circles = circleDAO.getAll();
+        AppDatabase db = Room.databaseBuilder(getApplicationContext(), AppDatabase.class, "circles").build();
+        List<CircleEntryPoint> circleEntryPoints = new ArrayList<>();
+        CircleEntryPointsDAO circleEntryPointsDAO = db.circleEntryPointsDAO();
 
-        // Implement your logic to compare currentLocation with the geofences
-        // and perform the necessary actions based on your requirements.
-        for (Circle circle : circles) {
-            LatLng circleCenter = new LatLng(circle.latitude, circle.longitude);
-            double distance = calculateDistance(currentLocation.getLatitude(), currentLocation.getLongitude(),
-                    circleCenter.latitude, circleCenter.longitude);
+        new Thread(() -> {
+            List<Circle> circles = (List<Circle>) circleDAO.getLastSessionCircles(sessionDAO.getLastSessionId());
+            for (Circle circle : circles) {
+                LatLng circleCenter = new LatLng(circle.latitude, circle.longitude);
+                double distance = calculateDistance(currentLocation.getLatitude(), currentLocation.getLongitude(),
+                        circleCenter.latitude, circleCenter.longitude);
 
-            // Check if the distance is within the geofence radius
-            if (distance <= 100) {
-                // Perform actions for entering the geofence
-                // You can trigger notifications, record data, etc.
-                Log.d("GeofenceService", "Entered geofence: " + circle.id);
+                // Check if the distance is within the geofence radius
+                if (distance <= 100) {
+                    CircleEntryPoint circleEntryPoint = new CircleEntryPoint();
+                    circleEntryPoint.latitude = circleCenter.latitude;
+                    circleEntryPoint.longitude = circleCenter.longitude;
+                    circleEntryPoint.sessionId = currentSession.getCurrentSessionId();
+                    circleEntryPointsDAO.insertCircleEntryPoints(circleEntryPoint);
+                    Log.d("GeofenceService", "Entered geofence: " + circle.id);
+                    Toast.makeText(this, "Entered geofence: "+ circle.id, Toast.LENGTH_SHORT).show();
+                }
             }
-        }
+        });
+
     }
 
     // Helper method to calculate distance between two sets of latitude and longitude
@@ -140,5 +157,9 @@ public class GeofenceService extends Service {
                 Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
         double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return R * c * 1000; // Distance in meters
+    }
+
+    public void togglePause() {
+        isPaused = !isPaused;
     }
 }

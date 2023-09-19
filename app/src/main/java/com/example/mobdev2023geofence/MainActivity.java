@@ -1,28 +1,28 @@
 package com.example.mobdev2023geofence;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.room.Room;
 
 import android.content.Intent;
-import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.Toast;
 
-public class MainActivity extends AppCompatActivity {
+import java.util.concurrent.CountDownLatch;
 
-    private long sessionStartTime;
+public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        startSession();
 
         // @TODO: maybe add some progress bars around here ( MobDev (2022 12 12) )
         Button btnMapActivity = (Button)findViewById(R.id.buttonMapActivity);
         Button btnResultsMapActivity = (Button)findViewById(R.id.buttonResultsMapActivity);
+        Button btnStopService = (Button)findViewById(R.id.btnStopService);
         btnMapActivity.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -36,31 +36,41 @@ public class MainActivity extends AppCompatActivity {
                 startActivity(new Intent(MainActivity.this, ResultsMapActivity.class));
             }
         });
-    }
 
-    private void startSession() {
-        sessionStartTime = System.currentTimeMillis();
-        // Display a welcome message or perform any other actions.
-        Toast.makeText(this, "Welcome! Session started.", Toast.LENGTH_SHORT).show();
+        btnStopService.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                endSession();
+                Intent serviceIntent = new Intent(MainActivity.this, GeofenceService.class);
+                stopService(serviceIntent);
+            }
+        });
     }
 
     private void endSession() {
-        long sessionEndTime = System.currentTimeMillis();
-        long sessionDuration = sessionEndTime - sessionStartTime;
+        try {
+            long endTime = System.currentTimeMillis();
+            final CountDownLatch latch = new CountDownLatch(1);
 
-        // Record session data, e.g., in a database or log file
-        Log.d("SessionInfo", "Session started at: " + sessionStartTime);
-        Log.d("SessionInfo", "Session ended at: " + sessionEndTime);
-        Log.d("SessionInfo", "Session duration (ms): " + sessionDuration);
-
-        // Display a message to indicate the session has ended
-        Toast.makeText(this, "Session ended.", Toast.LENGTH_SHORT).show();
+            AppDatabase db = Room.databaseBuilder(getApplicationContext(), AppDatabase.class, "circles").build();
+            SessionDAO userSessionDao = db.sessionDAO();
+            new Thread(() -> {
+                userSessionDao.updateSessionEndTime(endTime);
+                latch.countDown();
+            }).start();
+            try {
+                latch.await();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            Log.d("MyTag", "Session end failed: " + e.getMessage());
+        }
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // End the session when the app is closed
-        endSession();
     }
 }

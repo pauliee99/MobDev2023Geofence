@@ -23,11 +23,14 @@ public interface CircleDAO {
     public Circle getCircleUnique(double lat, double lon);
 
     @Query("SELECT * FROM circles WHERE id = :id")
-    public Circle getCircleById(int id);
+    public Circle getCirclesById(int id);
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     public void insertCircle(Circle... circles);
 
     @Query("DELETE FROM circles WHERE latitude = :lat AND longitude = :lon")
     int deleteCircleByLatLon(double lat, double lon);
+
+    @Query("SELECT * FROM circles WHERE session_id = :sessionId")
+    public List<Circle> getLastSessionCircles(String sessionId);
 }

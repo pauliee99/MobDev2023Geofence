@@ -28,6 +28,7 @@ import com.google.maps.android.SphericalUtil;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.logging.Logger;
 
@@ -37,6 +38,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private ActivityMapsBinding binding;
     private static String AUTHORITY = "com.example.mobdev2023geofence";
     private static String PATH = "circle";
+//    public CurrentSession currentSession = (CurrentSession) getApplication();
+//    private String currentSessionId;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -87,27 +90,31 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 //        mMap.moveCamera(CameraUpdateFactory.newLatLng(new LatLng()));
         List<Circle> circles = new ArrayList<>();
         List coordinates = new ArrayList();
-
+        CurrentSession currentSession = (CurrentSession) getApplication();
         AppDatabase db = Room.databaseBuilder(getApplicationContext(), AppDatabase.class, "circles").build();
         CircleDAO circleDAO = db.circleDAO();
+        SessionDAO sessionDAO = db.sessionDAO();
         ContentResolver resolver = this.getContentResolver();
         final CountDownLatch latch = new CountDownLatch(1);
 
         new Thread(() -> {
-            List<com.example.mobdev2023geofence.Circle> circlesdb = circleDAO.getAll();
-            circlesdb.forEach((tmp)->{
-                Log.d("MyTag", "Circle ID: " + tmp.id + ", Latitude: " + tmp.latitude + ", Longitude: " + tmp.longitude);
-                LatLng latlng = new LatLng(tmp.latitude, tmp.longitude);
-                coordinates.add(latlng);
-            });
-            latch.countDown();
+            try {
+                List<com.example.mobdev2023geofence.Circle> circlesdb = circleDAO.getAll();
+                circlesdb.forEach((tmp) -> {
+                    Log.d("MyTag", "Circle ID: " + tmp.id + ", Latitude: " + tmp.latitude + ", Longitude: " + tmp.longitude);
+                    LatLng latlng = new LatLng(tmp.latitude, tmp.longitude);
+                    coordinates.add(latlng);
+                });
+                latch.countDown();
+            } catch (Exception e) {
+                e.printStackTrace();
+                Log.d("MyTag", "Accessing data from db failed because:" + e.getMessage());
+            }
         }).start();
 
         try {
-            // Wait for the thread to finish using the CountDownLatch
+            //wait for the thread to finish taking coordnates from the db
             latch.await();
-
-            // You can now safely access 'circlesdb' here, and it should contain the fetched data
             coordinates.forEach((tmp)->{
                 Log.d("MyTag", "Circle ID: " + (LatLng) tmp);
             });
@@ -169,8 +176,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             }
 
             if (circleToRemove != null) {
-//                circleToRemove.remove();
-//                circles.remove(circleToRemove);
+                circleToRemove.remove();
+                circles.remove(circleToRemove);
             } else {
                 Circle newCircle = mMap.addCircle(circleOptions);
                 circles.add(newCircle);
@@ -181,15 +188,17 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         startButton.setOnClickListener(new View.OnClickListener() { // start service button
             @Override
             public void onClick(View view) {
+                // @TODO: don't start new session if a session is already open
+                startSession();
+                Toast.makeText(MapsActivity.this, "id is: " + currentSession.getCurrentSessionId(), Toast.LENGTH_SHORT).show();
                 for (int i = 0; i < circles.size(); i++){
                     com.example.mobdev2023geofence.Circle circle = new com.example.mobdev2023geofence.Circle();
                     circle.latitude = circles.get(i).getCenter().latitude;
                     circle.longitude = circles.get(i).getCenter().longitude;
-                    List<com.example.mobdev2023geofence.Circle> qwe = new ArrayList<>();
+                    circle.session_id = currentSession.getCurrentSessionId();
                     new Thread(() ->circleDAO.insertCircle(circle)).start();
                 }
                 startGeofenceService();
-                Toast.makeText(MapsActivity.this, "Service Started", Toast.LENGTH_SHORT).show();
             }
         });
 
@@ -213,6 +222,33 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private void startGeofenceService() {
         Intent serviceIntent = new Intent(this, GeofenceService.class);
         startService(serviceIntent);
+    }
+
+    private void startSession() {
+        try{
+            Session session = new Session();
+            CurrentSession currentSession = (CurrentSession) getApplication();
+//            currentSession = ((CurrentSession) getApplication());
+            String currentSessionId = UUID.randomUUID().toString();
+            currentSession.setCurrentSessionId(currentSessionId);
+            session.id = currentSessionId;
+            session.startTime = System.currentTimeMillis();
+
+//        Session userSession = new Session();
+//        Session.setStartTime(sessionStartTime);
+
+            AppDatabase db = Room.databaseBuilder(getApplicationContext(), AppDatabase.class, "circles").build();
+            SessionDAO sessionDao = db.sessionDAO();
+            // ending all previous sessions before starting a new one
+//            new Thread(() ->sessionDao.updateSessionEndTime(session.startTime)).start();
+            new Thread(() ->sessionDao.insertSession(session)).start();
+            Toast.makeText(this, "Welcome! Session started.", Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            e.printStackTrace();
+            Log.d("MyTag", "Session start failed: " + e.getMessage());
+            Toast.makeText(this, "Session start failed: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+
     }
 
 

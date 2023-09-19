@@ -32,7 +32,7 @@
         app:layout_constraintTop_toTopOf="parent" />
 
     <Button
-        android:id="@+id/button3"
+        android:id="@+id/btnStopService"
         android:layout_width="179dp"
         android:layout_height="83dp"
         android:text="Stop Service"

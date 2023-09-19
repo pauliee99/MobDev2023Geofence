@@ -24,7 +24,7 @@
 
     <!-- TODO: Make this button change text according to the service status -->
     <Button
-        android:id="@+id/startButton"
+        android:id="@+id/pauseButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Pause/Resume service"
