@@ -4,6 +4,7 @@ import android.app.Service;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
@@ -34,11 +35,18 @@ public class GeofenceService extends Service {
     private static final long MIN_TIME_BETWEEN_UPDATE = 5000; // 5 seconds
     private CurrentSession currentSession;
     public boolean isPaused = false;
+    private GpsBroadcastReceiver gpsBroadcastReceiver;
+
 
     @Override
     public void onCreate() {
         super.onCreate();
         Toast.makeText(this, "Service Started", Toast.LENGTH_SHORT).show();
+
+        gpsBroadcastReceiver = new GpsBroadcastReceiver();
+        IntentFilter intentFilter = new IntentFilter(LocationManager.PROVIDERS_CHANGED_ACTION);
+        registerReceiver(gpsBroadcastReceiver, intentFilter);
+
         resolver = getContentResolver();
         db = Room.databaseBuilder(getApplicationContext(), AppDatabase.class, "circles")
                 .fallbackToDestructiveMigration()
@@ -96,6 +104,10 @@ public class GeofenceService extends Service {
         Toast.makeText(this, "Service Stopped", Toast.LENGTH_SHORT).show();
         // Stop location updates when the service is destroyed
         locationManager.removeUpdates(locationListener);
+
+        if (gpsBroadcastReceiver != null) {
+            unregisterReceiver(gpsBroadcastReceiver);
+        }
     }
 
     @Nullable

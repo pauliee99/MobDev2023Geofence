@@ -6,6 +6,7 @@ import androidx.fragment.app.FragmentActivity;
 import androidx.room.Room;
 
 import android.Manifest;
+import android.app.PendingIntent;
 import android.content.ContentResolver;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -16,6 +17,9 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.Toast;
 
+import com.google.android.gms.location.Geofence;
+import com.google.android.gms.location.GeofencingClient;
+import com.google.android.gms.location.GeofencingRequest;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
@@ -23,6 +27,8 @@ import com.google.android.gms.maps.model.Circle;
 import com.google.android.gms.maps.model.CircleOptions;
 import com.google.android.gms.maps.model.LatLng;
 import com.example.mobdev2023geofence.databinding.ActivityMapsBinding;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.maps.android.SphericalUtil;
 
@@ -38,6 +44,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private ActivityMapsBinding binding;
     private static String AUTHORITY = "com.example.mobdev2023geofence";
     private static String PATH = "circle";
+    private GeofenceHelper geofenceHelper;
+    private GeofencingClient geofencingClient;
 //    public CurrentSession currentSession = (CurrentSession) getApplication();
 //    private String currentSessionId;
 
@@ -52,6 +60,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
+        geofenceHelper = new GeofenceHelper(this);
     }
 
     @Override
@@ -64,7 +73,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
     }
 
-    private void showPosition(){
+    private void showPosition() {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, 4);
             return;
@@ -115,13 +124,12 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         try {
             //wait for the thread to finish taking coordnates from the db
             latch.await();
-            coordinates.forEach((tmp)->{
+            coordinates.forEach((tmp) -> {
                 Log.d("MyTag", "Circle ID: " + (LatLng) tmp);
             });
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-
 
 
         coordinates.forEach((tmp) -> {
@@ -154,7 +162,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 if (distance < existingCircle.getRadius()) {
                     circleToRemove = existingCircle; //remove circle form the list
                     // and also remove it form the database if it exists
-                    if (circleToRemove == null){
+                    if (circleToRemove == null) {
                         Log.d("MyTag", "circle is null");
                     }
                     LatLng centerToRemove = circleToRemove.getCenter();
@@ -190,13 +198,14 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             public void onClick(View view) {
                 // @TODO: don't start new session if a session is already open
                 startSession();
-                Toast.makeText(MapsActivity.this, "id is: " + currentSession.getCurrentSessionId(), Toast.LENGTH_SHORT).show();
-                for (int i = 0; i < circles.size(); i++){
+                for (int i = 0; i < circles.size(); i++) {
                     com.example.mobdev2023geofence.Circle circle = new com.example.mobdev2023geofence.Circle();
                     circle.latitude = circles.get(i).getCenter().latitude;
                     circle.longitude = circles.get(i).getCenter().longitude;
                     circle.session_id = currentSession.getCurrentSessionId();
-                    new Thread(() ->circleDAO.insertCircle(circle)).start();
+                    new Thread(() -> circleDAO.insertCircle(circle)).start();
+                    LatLng latlng = new LatLng(circle.latitude, circle.longitude);
+                    addGeofence(latlng);
                 }
                 startGeofenceService();
             }
@@ -225,7 +234,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     }
 
     private void startSession() {
-        try{
+        try {
             Session session = new Session();
             CurrentSession currentSession = (CurrentSession) getApplication();
 //            currentSession = ((CurrentSession) getApplication());
@@ -241,14 +250,51 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             SessionDAO sessionDao = db.sessionDAO();
             // ending all previous sessions before starting a new one
 //            new Thread(() ->sessionDao.updateSessionEndTime(session.startTime)).start();
-            new Thread(() ->sessionDao.insertSession(session)).start();
-            Toast.makeText(this, "Welcome! Session started.", Toast.LENGTH_SHORT).show();
+            new Thread(() -> sessionDao.insertSession(session)).start();
+//            Toast.makeText(this, "Welcome! Session started.", Toast.LENGTH_SHORT).show();
         } catch (Exception e) {
             e.printStackTrace();
             Log.d("MyTag", "Session start failed: " + e.getMessage());
             Toast.makeText(this, "Session start failed: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
 
+    }
+
+    private void addGeofence(LatLng latLng) {
+
+        Geofence geofence = geofenceHelper.getGeofence("GEOFENCE_ID", latLng, 100, Geofence.GEOFENCE_TRANSITION_ENTER | Geofence.GEOFENCE_TRANSITION_DWELL | Geofence.GEOFENCE_TRANSITION_EXIT);
+        GeofencingRequest geofencingRequest = geofenceHelper.getGeofencingRequest(geofence);
+        PendingIntent pendingIntent = geofenceHelper.getPendingIntent();
+
+
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            // TODO: Consider calling
+            //    ActivityCompat#requestPermissions
+            // here to request the missing permissions, and then overriding
+            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            //                                          int[] grantResults)
+            // to handle the case where the user grants the permission. See the documentation
+            // for ActivityCompat#requestPermissions for more details.
+            return;
+        }
+        try {
+            geofencingClient.addGeofences(geofencingRequest, pendingIntent)
+                    .addOnSuccessListener(new OnSuccessListener<Void>() {
+                        @Override
+                        public void onSuccess(Void aVoid) {
+                            Log.d("MapsActivity", "onSuccess: Geofence Added...");
+                        }
+                    })
+                    .addOnFailureListener(new OnFailureListener() {
+                        @Override
+                        public void onFailure(@NonNull Exception e) {
+                            String errorMessage = geofenceHelper.getErrorString(e);
+                            Log.d("MapsActivity", "onFailure: " + errorMessage);
+                        }
+                    });
+        }catch(Exception e) {
+            Log.e("MyTag", "Exception in getPendingIntent: " + e.getMessage()); // Log the exception with a custom message
+        }
     }
 
 
